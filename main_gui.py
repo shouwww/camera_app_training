@@ -1,11 +1,14 @@
+import os, sys, glob, datetime
 import tkinter
 import tkinter.messagebox
 import customtkinter
-import PIL.Image, PIL.ImageTk
+import cv2
+from logging import INFO, basicConfig, getLogger
 from pycamera import CameraTmp
 
 customtkinter.set_appearance_mode("System")  # Modes: "System" (standard), "Dark", "Light"
 customtkinter.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
+logger = getLogger(__name__)
 
 
 class App(customtkinter.CTk):
@@ -13,29 +16,40 @@ class App(customtkinter.CTk):
         super().__init__()
 
         # configure window
-        self.title("CustomTkinter complex_example.py")
-        self.geometry(f"{1100}x{580}")
+        self.title("CustomTkinter window")
+        # self.state('zoomed')
+        # self.geometry(f"{1100}x{580}")
+        # self.attributes('-fullscreen', True)
         self.grid_columnconfigure([0, 1], weight=1)
         self.grid_rowconfigure(1, weight=1)
 
         self.cam = CameraTmp()
         self.after_id = 0
 
-        self.img_width = 640
-        self.img_height = 480
+        self.img_width = 320
+        self.img_height = 240
+
+        self.mode = 'stop'
+        self.base_dir = os.path.abspath(os.path.dirname(sys.argv[0]))
+        self.img_dir = os.path.join(self.base_dir, 'images')
+        os.makedirs(self.img_dir, exist_ok=True)
+        self.rowimg_dir = ''
+        self.thumbnail_imgs = []
+        self.select_thumbnail = 0
 
         # create frame
-        self.main_frame = customtkinter.CTkFrame(master=self, width=840, corner_radius=0)
+        self.main_frame = customtkinter.CTkFrame(master=self, width=2 * self.img_width / 3, corner_radius=0)
         self.main_frame.grid(row=0, column=0, sticky="nsew")
         self.set_up_header(self.main_frame, header_name="お絵かきアプリ")
-        self.sub_frame = customtkinter.CTkFrame(master=self, width=840, corner_radius=0)
+        self.sub_frame = customtkinter.CTkFrame(master=self, width=2 * self.img_width / 3, corner_radius=0)
         self.sub_frame.grid(row=2, column=0, sticky="ew")
         self.set_up_setting(self.sub_frame)
-        self.thumbnail_frame = customtkinter.CTkFrame(self, width=400, corner_radius=0)
-        self.thumbnail_frame.grid(row=0, column=1, rowspan=3, sticky="nsew")
-        self.thumbnail_frame.grid_columnconfigure(0, weight=1)
-        test_labeal3 = customtkinter.CTkButton(self.thumbnail_frame, text='thumbnail frame', width=180)
-        test_labeal3.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+        self.thumbnail_frame = customtkinter.CTkFrame(self, width=self.img_width / 3, corner_radius=0)
+        self.thumbnail_frame.grid(row=0, column=1, rowspan=3, padx=(0, 20), pady=(20, 20), sticky="nsew")
+        self.thumbnail_frame.grid_columnconfigure([0, 1, 2], weight=1)
+        self.thumbnail_frame.grid_rowconfigure([0, 1, 2, 3, 4], weight=1)
+        # test_labeal3 = customtkinter.CTkButton(self.thumbnail_frame, text='thumbnail frame', width=180)
+        # test_labeal3.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
         # main frame
         # view 1 frame in main frame
         self.cam_frame = customtkinter.CTkFrame(master=self)
@@ -58,20 +72,30 @@ class App(customtkinter.CTk):
         self.forward1_btn = customtkinter.CTkButton(self.view1_frame, text='>>', width=20)
         self.back1_btn.grid(column=0, row=1, sticky='ew')
         self.forward1_btn.grid(column=1, row=1, sticky='ew')
+        # view 2 frame in main frame
         self.img2_canva = tkinter.Canvas(self.view2_frame)
         self.img2_canva.configure(width=self.img_width, height=self.img_height)
         self.img2_canva.grid(column=0, row=0, columnspan=2, sticky="nsew")
-        self.back2_btn = customtkinter.CTkButton(self.view2_frame, text='<<', width=20)
-        self.forward2_btn = customtkinter.CTkButton(self.view2_frame, text='>>', width=20)
+        self.back2_btn = customtkinter.CTkButton(self.view2_frame, text='<<', width=20, command=lambda: self.view2_btn_callback(-1))
+        self.forward2_btn = customtkinter.CTkButton(self.view2_frame, text='>>', width=20, command=lambda: self.view2_btn_callback(1))
         self.back2_btn.grid(column=0, row=1, sticky='ew')
         self.forward2_btn.grid(column=1, row=1, sticky='ew')
-
-        # view 2 frame in main frame
-        # sub frame , output log , Quit btn, setting slider *2 
+        # thumbnail_s
+        self.thumbnail_canvasses = []
+        for i in range(15):
+            col = i % 3
+            row = i // 3
+            self.thumbnail_canvasses.append(tkinter.Canvas(self.thumbnail_frame, width=5, height=10, relief='flat', bg='white', bd=1))
+            self.thumbnail_canvasses[-1].grid(column=col, row=row, padx=1, pady=1, sticky=('nsew'))
         # initial set
+        self.main_frame.bind("<Configure>", self.resize)
+        self.after(0, lambda: self.wm_state('zoomed'))
     # End def
 
     def set_up_header(self, master_frame: customtkinter.CTkFrame, header_name):
+        """
+        set top label area widjet
+        """
         self.main_top_label = customtkinter.CTkLabel(master_frame, text=header_name)
         self.main_top_label.grid(row=0, column=0, padx=5, pady=5)
         self.main_cam_label = customtkinter.CTkLabel(master_frame, text='CameraNo')
@@ -88,6 +112,9 @@ class App(customtkinter.CTk):
         self.handwrite_btn.grid(row=1, column=3, padx=5, pady=5)
 
     def set_up_setting(self, master_frame: customtkinter.CTkFrame):
+        """
+        set bottom label area widjet
+        """
         master_frame.grid_columnconfigure(0, weight=1)
         master_frame.grid_rowconfigure(0, weight=1)
         self.log_tb = customtkinter.CTkTextbox(master_frame, width=450, height=80)
@@ -103,7 +130,41 @@ class App(customtkinter.CTk):
         self.quit_btn = customtkinter.CTkButton(master_frame, text='Quit', width=20)
         self.quit_btn.grid(row=0, column=3, rowspan=2)
 
+    def view2_btn_callback(self, type_btn=0):
+        """
+        preview image select
+        """
+        files = glob.glob(self.rowimg_dir + '/*.png')
+        if len(files) > 0:
+            self.select_thumbnail = self.select_thumbnail + type_btn
+            if self.select_thumbnail > 14:
+                self.select_thumbnail = 14
+            elif self.select_thumbnail < 0:
+                self.select_thumbnail = 0
+            elif self.select_thumbnail > len(files) - 1:
+                self.select_thumbnail = len(files) - 1
+            # End if
+            files.sort()
+            self.write_log(str(files[self.select_thumbnail]))
+            im = cv2.imread(files[self.select_thumbnail])
+            canvas_h = self.img2_canva.winfo_height()
+            canvas_w = self.img2_canva.winfo_width()
+            self.im2 = self.cam.change_img(im, canvas_w, canvas_h)
+            self.img2_canva.create_image(0, 0, anchor='nw', image=self.im2)
+        # End if
+    # End def
+
     def start_callback_func(self):
+        """
+        start recording image btn
+        """
+        if len(self.thumbnail_imgs) > 0:
+            self.thumbnail_imgs = []
+        now = datetime.datetime.now()
+        self.img_dir = os.path.join(self.base_dir, 'images', now.strftime('%Y%m%d_%H%M%S_%f'))
+        os.makedirs(self.img_dir, exist_ok=True)
+        self.rowimg_dir = os.path.join(self.img_dir, 'row_imgs')
+        os.makedirs(self.rowimg_dir, exist_ok=True)
         self.cam.connect_start()
         self.is_running = True
         self.update_func()
@@ -112,6 +173,9 @@ class App(customtkinter.CTk):
     # End def
 
     def stop_callback_func(self):
+        """
+        stop recording image btn
+        """
         self.is_running = False
         self.after_cancel(self.after_id)
         self.stop_btn.configure(fg_color='gray')
@@ -119,7 +183,10 @@ class App(customtkinter.CTk):
     # End def
 
     def write_log(self, msg=""):
-        numlines = int(self.log_tb.index('end - 1 line').split('.')[0])
+        """
+        write log viewer string
+        """
+        # numlines = int(self.log_tb.index('end - 1 line').split('.')[0])
         self.log_tb['state'] = 'normal'
         if self.log_tb.index('end-1c') != '1.0':
             self.log_tb.insert('end', '\n')
@@ -144,19 +211,36 @@ class App(customtkinter.CTk):
         self.value_threshhold_2 = int(value)
     # End def
 
+    def resize(self, event):
+        width = self.winfo_width()
+        heigh = self.winfo_height()
+        print(width, heigh)
+    # End def
 
     def update_func(self):
         # update io state from robot controler interval
         update_interval = 100
-        self.img = self.cam.get_img()
+        canvas_h = self.img1_canva.winfo_height()
+        canvas_w = self.img1_canva.winfo_width()
+        thumbnail_h = self.thumbnail_canvasses[0].winfo_height()
+        thumbnail_w = self.thumbnail_canvasses[0].winfo_width()
+        self.frame, self.img = self.cam.get_img(w=canvas_w, h=canvas_h)
+        now = datetime.datetime.now()
+        row_img_path = os.path.join(self.rowimg_dir, now.strftime('%Y%m%d_%H%M%S_%f') + '.png')
+        cv2.imwrite(row_img_path, self.frame)
         self.img1_canva.create_image(0, 0, image=self.img, anchor=tkinter.NW)
-        #print(img)
-        #my_image = customtkinter.CTkImage(dark_image=img)
-        #self.image_label.configure(image=my_image)
-
-        self.after_id = self.after(update_interval, self.update_func)
+        self.thumbnail_img = self.cam.change_img(self.frame, thumbnail_w, thumbnail_h)
+        img_files = glob.glob(self.rowimg_dir + '/*.png')
+        print(len(img_files) - 1)
+        self.thumbnail_imgs.append(self.thumbnail_img)
+        for i in range(len(self.thumbnail_imgs)):
+            self.thumbnail_canvasses[i].create_image(0, 0, image=self.thumbnail_imgs[i], anchor=tkinter.NW)
+        if len(img_files) >= 15:
+            self.stop_callback_func()
+        else:
+            self.after_id = self.after(update_interval, self.update_func)
+        # End if
     # End def
-
 # End class
 
 
@@ -190,9 +274,11 @@ class HeaderFrame(customtkinter.CTkFrame):
         self.cam.connect_start()
         self.is_running = True
     # End def
+
     def stop_callback_func(self):
         self.is_running = False
-
+    # End def
+# End class
 
 
 class SettingFrame(customtkinter.CTkFrame):
@@ -224,7 +310,7 @@ class SettingFrame(customtkinter.CTkFrame):
         self.quit_btn.grid(row=0, column=3, rowspan=2)
 
     def write_log(self, msg=""):
-        numlines = int(self.log_tb.index('end - 1 line').split('.')[0])
+        # numlines = int(self.log_tb.index('end - 1 line').split('.')[0])
         self.log_tb['state'] = 'normal'
         if self.log_tb.index('end-1c') != '1.0':
             self.log_tb.insert('end', '\n')
@@ -251,12 +337,14 @@ class SettingFrame(customtkinter.CTkFrame):
 
     def slider_event(self, value):
         self.write_log(str(value))
-
-
+    # End def
 # End class
 
 
 def main():
+    os.makedirs(os.path.join(os.path.dirname(sys.argv[0]), "log"), exist_ok=True)
+    basicConfig(level=INFO, filename=os.path.join(os.path.dirname(sys.argv[0]), "log", "mainlog.log"), format="%(asctime)s:%(levelname)s:%(message)s ")
+    logger.info('rob lib rogs')
     app = App()
     app.mainloop()
 

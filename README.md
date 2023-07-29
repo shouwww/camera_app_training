@@ -29,6 +29,8 @@ pip install pillow
 pip install opencv-python
 ```
 
+haarcascades files : https://github.com/opencv/opencv/tree/master/data/haarcascades
+
 # Usage
 
 DEMO の実行方法など、"hoge"の基本的な使い方を説明する
