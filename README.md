@@ -25,6 +25,8 @@ Requirement で列挙したライブラリなどのインストール方法を�
 
 ```bash
 pip install customtkinter
+pip install pillow
+pip install opencv-python
 ```
 
 # Usage

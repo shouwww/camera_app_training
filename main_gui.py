@@ -1,6 +1,7 @@
 import tkinter
 import tkinter.messagebox
 import customtkinter
+import PIL.Image, PIL.ImageTk
 from pycamera import CameraTmp
 
 customtkinter.set_appearance_mode("System")  # Modes: "System" (standard), "Dark", "Light"
@@ -20,6 +21,9 @@ class App(customtkinter.CTk):
         self.cam = CameraTmp()
         self.after_id = 0
 
+        self.img_width = 640
+        self.img_height = 480
+
         # create frame
         self.main_frame = customtkinter.CTkFrame(master=self, width=840, corner_radius=0)
         self.main_frame.grid(row=0, column=0, sticky="nsew")
@@ -28,19 +32,39 @@ class App(customtkinter.CTk):
         self.sub_frame.grid(row=2, column=0, sticky="ew")
         self.set_up_setting(self.sub_frame)
         self.thumbnail_frame = customtkinter.CTkFrame(self, width=400, corner_radius=0)
-        self.thumbnail_frame.grid(row=0, column=1, rowspan=3, sticky="ns")
+        self.thumbnail_frame.grid(row=0, column=1, rowspan=3, sticky="nsew")
+        self.thumbnail_frame.grid_columnconfigure(0, weight=1)
         test_labeal3 = customtkinter.CTkButton(self.thumbnail_frame, text='thumbnail frame', width=180)
         test_labeal3.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
         # main frame
         # view 1 frame in main frame
         self.cam_frame = customtkinter.CTkFrame(master=self)
         self.cam_frame.grid(row=1, column=0, sticky="nsew")
-        
+        # view1 is left frame . used usb camera image view org images
         self.view1_frame = customtkinter.CTkFrame(master=self.cam_frame)
         self.view1_frame.pack(fill="both", expand=True, side=customtkinter.LEFT)
-        self.view2_frame = customtkinter.CTkFrame(master=self.cam_frame, fg_color='white')
+        self.view1_frame.grid_columnconfigure([0, 1], weight=1)
+        self.view1_frame.grid_rowconfigure(0, weight=1)
+        # view2 is right frame . used edited images
+        self.view2_frame = customtkinter.CTkFrame(master=self.cam_frame)
         self.view2_frame.pack(fill="both", expand=True, side=customtkinter.LEFT)
-        self.image_label = customtkinter.CTkLabel(self.view1_frame, text="AAAAA")  # display image with a CTkLabel
+        self.view2_frame.grid_columnconfigure([0, 1], weight=1)
+        self.view2_frame.grid_rowconfigure(0, weight=1)
+        # self.image_label = customtkinter.CTkLabel(self.view1_frame, text="AAAAA")  # display image with a CTkLabel
+        self.img1_canva = tkinter.Canvas(self.view1_frame)
+        self.img1_canva.configure(width=self.img_width, height=self.img_height)
+        self.img1_canva.grid(column=0, row=0, columnspan=2, sticky="nsew")
+        self.back1_btn = customtkinter.CTkButton(self.view1_frame, text='<<', width=20)
+        self.forward1_btn = customtkinter.CTkButton(self.view1_frame, text='>>', width=20)
+        self.back1_btn.grid(column=0, row=1, sticky='ew')
+        self.forward1_btn.grid(column=1, row=1, sticky='ew')
+        self.img2_canva = tkinter.Canvas(self.view2_frame)
+        self.img2_canva.configure(width=self.img_width, height=self.img_height)
+        self.img2_canva.grid(column=0, row=0, columnspan=2, sticky="nsew")
+        self.back2_btn = customtkinter.CTkButton(self.view2_frame, text='<<', width=20)
+        self.forward2_btn = customtkinter.CTkButton(self.view2_frame, text='>>', width=20)
+        self.back2_btn.grid(column=0, row=1, sticky='ew')
+        self.forward2_btn.grid(column=1, row=1, sticky='ew')
 
         # view 2 frame in main frame
         # sub frame , output log , Quit btn, setting slider *2 
@@ -87,14 +111,12 @@ class App(customtkinter.CTk):
         self.stop_btn.configure(fg_color='green')
     # End def
 
-
-
     def stop_callback_func(self):
         self.is_running = False
         self.after_cancel(self.after_id)
         self.stop_btn.configure(fg_color='gray')
         self.start_btn.configure(fg_color='green')
-
+    # End def
 
     def write_log(self, msg=""):
         numlines = int(self.log_tb.index('end - 1 line').split('.')[0])
@@ -125,11 +147,12 @@ class App(customtkinter.CTk):
 
     def update_func(self):
         # update io state from robot controler interval
-        update_interval = 10
-        img = self.cam.get_img()
-        print(img)
-        my_image = customtkinter.CTkImage(dark_image=img)
-        self.image_label.configure(image=my_image)
+        update_interval = 100
+        self.img = self.cam.get_img()
+        self.img1_canva.create_image(0, 0, image=self.img, anchor=tkinter.NW)
+        #print(img)
+        #my_image = customtkinter.CTkImage(dark_image=img)
+        #self.image_label.configure(image=my_image)
 
         self.after_id = self.after(update_interval, self.update_func)
     # End def
