@@ -2,12 +2,17 @@ import os, sys
 import cv2
 import numpy as np
 from PIL import Image, ImageTk
-from logging import INFO, basicConfig, getLogger
-logger = getLogger(__name__)
+from logging import INFO, basicConfig, getLogger, NullHandler
 
 
 class CameraTmp():
     def __init__(self):
+        # set logger
+        self._logger = getLogger(__name__)
+        self._logger.addHandler(NullHandler())
+        self._logger.setLevel(INFO)
+        self._logger.propagate = True
+        self._logger.info('init camera')
         self.is_connected = False
 
     def connect_start(self):
@@ -96,8 +101,10 @@ class CameraTmp():
 
 
 def main():
+    logger = getLogger(__name__)
     os.makedirs(os.path.join(os.path.dirname(sys.argv[0]), "log"), exist_ok=True)
     basicConfig(level=INFO, filename=os.path.join(os.path.dirname(sys.argv[0]), "log", "cameralog.log"), format="%(asctime)s:%(levelname)s:%(message)s ")
+    logger.info('camera log')
 
     cam = CameraTmp()
     cam.connect_start()

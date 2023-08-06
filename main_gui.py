@@ -5,6 +5,7 @@ import customtkinter
 import cv2
 from logging import INFO, basicConfig, getLogger
 from pycamera import CameraTmp
+from pyImageProcessing import ImageProcessing
 
 customtkinter.set_appearance_mode("System")  # Modes: "System" (standard), "Dark", "Light"
 customtkinter.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
@@ -24,6 +25,7 @@ class App(customtkinter.CTk):
         self.grid_rowconfigure(1, weight=1)
 
         self.cam = CameraTmp()
+        self.img_tool = ImageProcessing()
         self.after_id = 0
 
         self.img_width = 320
@@ -34,6 +36,7 @@ class App(customtkinter.CTk):
         self.img_dir = os.path.join(self.base_dir, 'images')
         os.makedirs(self.img_dir, exist_ok=True)
         self.rowimg_dir = ''
+        self.faceimg_dir = ''
         self.thumbnail_imgs = []
         self.select_thumbnail = 0
 
@@ -117,11 +120,11 @@ class App(customtkinter.CTk):
         """
         master_frame.grid_columnconfigure(0, weight=1)
         master_frame.grid_rowconfigure(0, weight=1)
-        self.log_tb = customtkinter.CTkTextbox(master_frame, width=450, height=80)
+        self.log_tb = customtkinter.CTkTextbox(master_frame, width=300, height=80)
         self.log_tb.grid(row=0, column=0, rowspan=2, padx=5, pady=5, sticky='ew')
-        self.slider_threshold_1 = customtkinter.CTkSlider(master_frame, from_=0, to=600, number_of_steps=600, command=self.set_threshold_1)
+        self.slider_threshold_1 = customtkinter.CTkSlider(master_frame, width=400, from_=0, to=600, number_of_steps=600, command=self.set_threshold_1)
         self.slider_threshold_1.grid(row=0, column=1, padx=5, pady=5)
-        self.slider_threshold_2 = customtkinter.CTkSlider(master_frame, from_=0, to=600, number_of_steps=600, command=self.set_threshold_2)
+        self.slider_threshold_2 = customtkinter.CTkSlider(master_frame, width=400, from_=0, to=600, number_of_steps=600, command=self.set_threshold_2)
         self.slider_threshold_2.grid(row=1, column=1, padx=5, pady=5)
         self.txt_threshhold_1 = customtkinter.CTkTextbox(master_frame, width=40, height=2)
         self.txt_threshhold_1.grid(row=0, column=2)
@@ -129,12 +132,15 @@ class App(customtkinter.CTk):
         self.txt_threshhold_2.grid(row=1, column=2)
         self.quit_btn = customtkinter.CTkButton(master_frame, text='Quit', width=20)
         self.quit_btn.grid(row=0, column=3, rowspan=2)
+        self.slider_threshold_1.set(100)
+        self.slider_threshold_2.set(200)
 
     def view2_btn_callback(self, type_btn=0):
         """
         preview image select
         """
         files = glob.glob(self.rowimg_dir + '/*.png')
+        face_files = glob.glob(self.faceimg_dir + '/*.png')
         if len(files) > 0:
             self.select_thumbnail = self.select_thumbnail + type_btn
             if self.select_thumbnail > 14:
@@ -145,12 +151,17 @@ class App(customtkinter.CTk):
                 self.select_thumbnail = len(files) - 1
             # End if
             files.sort()
-            self.write_log(str(files[self.select_thumbnail]))
+            face_files.sort()
+            self.write_log(str(self.select_thumbnail))
             im = cv2.imread(files[self.select_thumbnail])
+            face = cv2.imread(face_files[self.select_thumbnail])
+            face_line, contours, data_lines = self.img_tool.output_line_drawing(face)
             canvas_h = self.img2_canva.winfo_height()
             canvas_w = self.img2_canva.winfo_width()
-            self.im2 = self.cam.change_img(im, canvas_w, canvas_h)
-            self.img2_canva.create_image(0, 0, anchor='nw', image=self.im2)
+            self.im2 = self.cam.change_img(face_line, canvas_w, canvas_h)
+            self.re_face = self.img_tool.resize_tool(face, w=canvas_w, h=canvas_h)
+            self.img1_canva.create_image(0, 0, image=self.re_face, anchor='nw')
+            self.img2_canva.create_image(0, 0, image=self.im2, anchor='nw')
         # End if
     # End def
 
@@ -164,7 +175,9 @@ class App(customtkinter.CTk):
         self.img_dir = os.path.join(self.base_dir, 'images', now.strftime('%Y%m%d_%H%M%S_%f'))
         os.makedirs(self.img_dir, exist_ok=True)
         self.rowimg_dir = os.path.join(self.img_dir, 'row_imgs')
+        self.faceimg_dir = os.path.join(self.img_dir, 'face_imgs')
         os.makedirs(self.rowimg_dir, exist_ok=True)
+        os.makedirs(self.faceimg_dir, exist_ok=True)
         self.cam.connect_start()
         self.is_running = True
         self.update_func()
@@ -201,6 +214,8 @@ class App(customtkinter.CTk):
         self.txt_threshhold_1.insert("end", str(int(value)))
         self.txt_threshhold_1['state'] = 'disabled'
         self.value_threshhold_1 = int(value)
+        self.img_tool.set_threshold(th1=value)
+        self.view2_btn_callback(type_btn=0)
     # End def
 
     def set_threshold_2(self, value):
@@ -209,6 +224,8 @@ class App(customtkinter.CTk):
         self.txt_threshhold_2.insert("end", str(int(value)))
         self.txt_threshhold_2['state'] = 'disabled'
         self.value_threshhold_2 = int(value)
+        self.img_tool.set_threshold(th2=value)
+        self.view2_btn_callback(type_btn=0)
     # End def
 
     def resize(self, event):
@@ -225,17 +242,23 @@ class App(customtkinter.CTk):
         thumbnail_h = self.thumbnail_canvasses[0].winfo_height()
         thumbnail_w = self.thumbnail_canvasses[0].winfo_width()
         self.frame, self.img = self.cam.get_img(w=canvas_w, h=canvas_h)
+        face_flg, self.face_frame = self.img_tool.detect_face(self.frame)
+        self.re_face = self.img_tool.resize_tool(self.face_frame, w=canvas_w, h=canvas_h)
         now = datetime.datetime.now()
         row_img_path = os.path.join(self.rowimg_dir, now.strftime('%Y%m%d_%H%M%S_%f') + '.png')
-        cv2.imwrite(row_img_path, self.frame)
+        face_img_path = os.path.join(self.faceimg_dir, now.strftime('%Y%m%d_%H%M%S_%f') + '.png')
         self.img1_canva.create_image(0, 0, image=self.img, anchor=tkinter.NW)
-        self.thumbnail_img = self.cam.change_img(self.frame, thumbnail_w, thumbnail_h)
-        img_files = glob.glob(self.rowimg_dir + '/*.png')
-        print(len(img_files) - 1)
-        self.thumbnail_imgs.append(self.thumbnail_img)
-        for i in range(len(self.thumbnail_imgs)):
-            self.thumbnail_canvasses[i].create_image(0, 0, image=self.thumbnail_imgs[i], anchor=tkinter.NW)
-        if len(img_files) >= 15:
+        if face_flg:
+            cv2.imwrite(row_img_path, self.frame)
+            cv2.imwrite(face_img_path, self.face_frame)
+            self.img2_canva.create_image(0, 0, image=self.re_face, anchor=tkinter.NW)
+            self.thumbnail_img = self.img_tool.resize_tool(self.face_frame, thumbnail_w, thumbnail_h)
+            img_files = glob.glob(self.rowimg_dir + '/*.png')
+            print(len(img_files) - 1)
+            self.thumbnail_imgs.append(self.thumbnail_img)
+            for i in range(len(self.thumbnail_imgs)):
+                self.thumbnail_canvasses[i].create_image(0, 0, image=self.thumbnail_imgs[i], anchor=tkinter.NW)
+        if len(self.thumbnail_imgs) >= 15:
             self.stop_callback_func()
         else:
             self.after_id = self.after(update_interval, self.update_func)
