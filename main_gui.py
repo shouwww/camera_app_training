@@ -6,6 +6,7 @@ import cv2
 from logging import INFO, basicConfig, getLogger
 from pycamera import CameraTmp
 from pyImageProcessing import ImageProcessing
+from handwrite_window import HandWriteWindow
 
 customtkinter.set_appearance_mode("System")  # Modes: "System" (standard), "Dark", "Light"
 customtkinter.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
@@ -30,6 +31,8 @@ class App(customtkinter.CTk):
 
         self.img_width = 320
         self.img_height = 240
+
+        self.handwritewindow = None
 
         self.mode = 'stop'
         self.base_dir = os.path.abspath(os.path.dirname(sys.argv[0]))
@@ -228,6 +231,12 @@ class App(customtkinter.CTk):
         self.view2_btn_callback(type_btn=0)
     # End def
 
+    def open_toplevel(self):
+        if self.handwritewindow is None or not self.handwritewindow.winfo_exists():
+            self.toplevel_window = HandWriteWindow(self)  # create window if its None or destroyed
+        else:
+            self.toplevel_window.focus()  # if window exists focus it
+
     def resize(self, event):
         width = self.winfo_width()
         heigh = self.winfo_height()
@@ -367,7 +376,7 @@ class SettingFrame(customtkinter.CTkFrame):
 def main():
     os.makedirs(os.path.join(os.path.dirname(sys.argv[0]), "log"), exist_ok=True)
     basicConfig(level=INFO, filename=os.path.join(os.path.dirname(sys.argv[0]), "log", "mainlog.log"), format="%(asctime)s:%(levelname)s:%(message)s ")
-    logger.info('rob lib rogs')
+    logger.info('main window rogs')
     app = App()
     app.mainloop()
 
